@@ -506,7 +506,17 @@ async function initPeer() {
   setStatus('connecting', 'CONNECTING TO RELAY');
   setLog('Connecting to relay server…');
 
-  peer = new Peer('sc2-' + myCode, {debug: 0});
+  // 添加自定义STUN服务器以改善连接成功率
+  peer = new Peer('sc2-' + myCode, {
+    debug: 0,
+    config: {
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' }
+      ]
+    }
+  });
 
   peer.on('open', () => {
     setStatus('', 'READY');
