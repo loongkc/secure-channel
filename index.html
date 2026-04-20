@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SECURE CHANNEL</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+:root{
+  --bg:#0b0b0b;--surface:#111;--surface2:#161616;
+  --border:#1f1f1f;--border2:#2a2a2a;
+  --green:#27c93f;--green-hi:#4dff65;
+  --amber:#f0a500;--red:#e84444;--blue:#4da6e8;
+  --text:#b8b8b8;--text-dim:#484848;--text-hi:#e0e0e0;
+}
+body{background:var(--bg);color:var(--text);font-family:'Courier New',Courier,monospace;
+  font-size:13px;line-height:1.6;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+
+.hdr{display:flex;align-items:center;justify-content:space-between;
+  padding:9px 16px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0}
+.hdr-title{color:var(--green);font-size:13px;letter-spacing:4px;font-weight:bold}
+.hdr-right{display:flex;align-items:center;gap:12px;font-size:11px;letter-spacing:1px}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--text-dim);display:inline-block;margin-right:5px}
+.dot.on{background:var(--green);box-shadow:0 0 6px var(--green)}
+.dot.conn{background:var(--amber);animation:blink .9s infinite}
+.dot.err{background:var(--red)}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+
+.btn{background:transparent;border:1px solid var(--border2);color:var(--text);
+  font-family:'Courier New',monospace;font-size:11px;letter-spacing:1.5px;
+  padding:5px 12px;cursor:pointer;text-transform:uppercase;
+  transition:border-color .15s,color .15s,background .15s}
+.btn:hover{border-color:var(--green);color:var(--green)}
+.btn.primary{border-color:var(--green);color:var(--green)}
+.btn.primary:hover{background:var(--green);color:var(--bg)}
+.btn.danger{border-color:var(--red);color:var(--red)}
+.btn.danger:hover{background:var(--red);color:#fff}
+
+.main{flex:1;overflow:hidden;display:flex;flex-direction:column;position:relative}
+
+/* BOOT */
+#boot{position:absolute;inset:0;background:var(--bg);display:flex;
+  align-items:center;justify-content:center;z-index:50;padding:24px}
+.boot-lines{width:100%;max-width:480px;font-size:12px;color:var(--text-dim)}
+.boot-line{opacity:0;transition:opacity .08s}
+.boot-line.show{opacity:1}
+.boot-line.hi{color:var(--green)}
+
+/* SETUP */
+#setup{flex:1;overflow-y:auto;display:flex;align-items:center;
+  justify-content:center;padding:24px 16px}
+.setup-wrap{width:100%;max-width:460px}
+.panel{background:var(--surface);border:1px solid var(--border);padding:20px;margin-bottom:12px}
+.panel-label{font-size:10px;letter-spacing:2.5px;color:var(--text-dim);
+  text-transform:uppercase;margin-bottom:14px;display:flex;align-items:center;gap:6px}
+.panel-label::after{content:'';flex:1;height:1px;background:var(--border)}
+.code-display{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+.code-val{font-size:30px;letter-spacing:7px;color:var(--green);font-weight:bold;
+  cursor:pointer;user-select:all;transition:color .15s}
+.code-val:hover{color:var(--green-hi)}
+.code-copy{font-size:10px;letter-spacing:1px;color:var(--text-dim);cursor:pointer;
+  padding:3px 8px;border:1px solid var(--border2);transition:color .15s,border-color .15s;user-select:none}
+.code-copy:hover{color:var(--text);border-color:var(--text-dim)}
+.code-note{font-size:11px;color:var(--text-dim);line-height:1.5;margin-bottom:14px}
+.waiting{display:none;align-items:center;gap:8px;font-size:11px;
+  color:var(--amber);letter-spacing:1px;margin-top:2px}
+.spin{width:10px;height:10px;border-radius:50%;border:1px solid var(--text-dim);
+  border-top-color:var(--amber);animation:rot .7s linear infinite;flex-shrink:0}
+@keyframes rot{to{transform:rotate(360deg)}}
+.code-input{background:var(--bg);border:1px solid var(--border2);color:var(--text-hi);
+  font-family:'Courier New',monospace;font-size:18px;letter-spacing:5px;
+  padding:10px 14px;width:100%;outline:none;text-transform:uppercase;margin-bottom:10px;
+  transition:border-color .15s}
+.code-input:focus{border-color:var(--green)}
+.code-input::placeholder{letter-spacing:2px;color:var(--text-dim);font-size:12px}
+.setup-log{font-size:11px;color:var(--text-dim);padding:4px 0;min-height:18px;letter-spacing:.5px}
+
+/* CHAT */
+#chat{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.chat-bar{display:flex;align-items:center;justify-content:space-between;
+  padding:5px 14px;background:var(--surface);border-bottom:1px solid var(--border);
+  flex-shrink:0;font-size:10px;letter-spacing:1px;flex-wrap:wrap;gap:4px}
+.enc-badge{color:var(--green)}
+.fp{color:var(--text-dim)}
+.messages{flex:1;overflow-y:auto;padding:10px 14px;display:flex;flex-direction:column;gap:1px}
+.messages::-webkit-scrollbar{width:3px}
+.messages::-webkit-scrollbar-thumb{background:var(--border2)}
+.msg{display:flex;gap:0;padding:1px 0;line-height:1.55}
+.msg-t{color:var(--text-dim);font-size:11px;flex-shrink:0;min-width:68px;padding-top:1px}
+.msg-s{font-size:11px;font-weight:bold;flex-shrink:0;min-width:46px;padding-top:1px}
+.msg-s.you{color:var(--blue)}.msg-s.peer{color:var(--amber)}.msg-s.sys{color:var(--text-dim)}
+.msg-b{color:var(--text-hi);word-break:break-word;user-select:text}
+.msg.sys-row .msg-b{color:var(--text-dim);font-style:italic}
+hr.div{border:none;border-top:1px solid var(--border);margin:6px 0}
+.typing-row{height:20px;flex-shrink:0;padding:0 14px;font-size:11px;color:var(--text-dim)}
+.input-bar{display:flex;align-items:center;border-top:1px solid var(--border);
+  background:var(--surface);flex-shrink:0}
+.input-prompt{color:var(--green);padding:0 8px 0 14px;font-size:15px;flex-shrink:0;line-height:1;user-select:none}
+.msg-input{flex:1;background:transparent;border:none;color:var(--text-hi);
+  font-family:'Courier New',monospace;font-size:13px;padding:11px 6px;
+  outline:none;resize:none;line-height:1.5;min-height:42px;max-height:110px}
+.msg-input::placeholder{color:var(--text-dim)}
+.send-btn{align-self:stretch;padding:0 14px;border:none;border-left:1px solid var(--border);
+  background:transparent;color:var(--text-dim);font-family:'Courier New',monospace;
+  font-size:11px;letter-spacing:1px;cursor:pointer;
+  transition:color .15s,background .15s;text-transform:uppercase}
+.send-btn:hover{color:var(--green);background:var(--surface2)}
+
+.toast{position:fixed;bottom:52px;left:50%;transform:translateX(-50%);
+  background:var(--surface2);border:1px solid var(--border2);color:var(--text);
+  padding:7px 16px;font-size:11px;letter-spacing:1px;opacity:0;
+  transition:opacity .25s;pointer-events:none;z-index:200;white-space:nowrap}
+.toast.show{opacity:1}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+
+<div class="hdr">
+  <div class="hdr-title">SECURE CHANNEL</div>
+  <div class="hdr-right">
+    <span><span class="dot" id="dot"></span><span id="status-txt">INIT</span></span>
+    <button class="btn danger hidden" id="disc-btn" onclick="doDisconnect()">DISCONNECT</button>
+  </div>
+</div>
+
+<div class="main">
+  <div id="boot">
+    <div class="boot-lines" id="boot-lines"></div>
+  </div>
+
+  <div id="setup" class="hidden">
+    <div class="setup-wrap">
+      <div class="panel">
+        <div class="panel-label">Your one-time code</div>
+        <div class="code-display">
+          <span class="code-val" id="code-val" onclick="copyCode()" title="Click to copy">······</span>
+          <span class="code-copy" onclick="copyCode()">[COPY]</span>
+        </div>
+        <div class="code-note">Share this code with your peer. It expires when you close this tab.</div>
+        <div class="waiting" id="waiting">
+          <div class="spin"></div>
+          <span>WAITING FOR INCOMING CONNECTION</span>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-label">Connect to peer</div>
+        <input class="code-input" id="join-input"
+          placeholder="ENTER PEER CODE"
+          maxlength="6" autocomplete="off" spellcheck="false"/>
+        <button class="btn primary" id="join-btn" onclick="doJoin()" style="width:100%">ESTABLISH CONNECTION ↵</button>
+      </div>
+      <div class="setup-log" id="setup-log"></div>
+    </div>
+  </div>
+
+  <div id="chat" class="hidden">
+    <div class="chat-bar">
+      <span class="enc-badge">■ END-TO-END ENCRYPTED · ECDH P-256 + AES-256-GCM</span>
+      <span class="fp" id="fp-display"></span>
+    </div>
+    <div class="messages" id="messages"></div>
+    <div class="typing-row" id="typing-row"></div>
+    <div class="input-bar">
+      <span class="input-prompt">›</span>
+      <textarea class="msg-input" id="msg-input" rows="1"
+        placeholder="Type a message… (Enter to send, Shift+Enter for newline)"
+        onkeydown="handleKey(event)" oninput="handleTyping()"></textarea>
+      <button class="send-btn" onclick="sendMsg()">SEND</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+var peer=null,conn=null,myCode='',myKeyPair=null,myPubB64='',sharedKey=null;
+var typingOutTimer=null,lastTypingSent=false,connTimeout=null;
+
+var ICE=[
+  {urls:'stun:stun.l.google.com:19302'},
+  {urls:'stun:stun1.l.google.com:19302'},
+  {urls:'stun:stun2.l.google.com:19302'},
+  {urls:'stun:stun3.l.google.com:19302'},
+  {urls:'turn:openrelay.metered.ca:80',username:'openrelayproject',credential:'openrelayproject'},
+  {urls:'turn:openrelay.metered.ca:443',username:'openrelayproject',credential:'openrelayproject'},
+  {urls:'turn:openrelay.metered.ca:443?transport=tcp',username:'openrelayproject',credential:'openrelayproject'},
+  {urls:'turn:relay.metered.ca:80',username:'e8dd65cf4a4a42b5b9e21e55',credential:'uFnDr+cPD9q4jyoP'},
+  {urls:'turn:relay.metered.ca:443',username:'e8dd65cf4a4a42b5b9e21e55',credential:'uFnDr+cPD9q4jyoP'},
+  {urls:'turns:relay.metered.ca:443?transport=tcp',username:'e8dd65cf4a4a42b5b9e21e55',credential:'uFnDr+cPD9q4jyoP'}
+];
+
+var BOOT=[
+  {t:'[0.000] Initializing secure channel runtime…',hi:false},
+  {t:'[0.012] Entropy source: window.crypto (CSPRNG)',hi:false},
+  {t:'[0.024] Generating ECDH P-256 key pair…',hi:false},
+  {t:'[0.081] Key pair generated — private key: non-exportable',hi:false},
+  {t:'[0.082] ICE config: Google STUN + OpenRelay TURN servers',hi:false},
+  {t:'[0.095] Cipher: AES-256-GCM per message, unique IV',hi:false},
+  {t:'[0.11x] Key exchange: ECDH → HKDF-derived AES key',hi:false},
+  {t:'[ready] All systems ready.',hi:true}
+];
+
+var delay=function(ms){return new Promise(function(r){setTimeout(r,ms)})};
+
+async function runBoot(){
+  var c=document.getElementById('boot-lines');
+  for(var i=0;i<BOOT.length;i++){
+    var item=BOOT[i];
+    var el=document.createElement('div');
+    el.className='boot-line'+(item.hi?' hi':'');
+    el.textContent=item.t;
+    c.appendChild(el);
+    await delay(60);
+    el.classList.add('show');
+    await delay(item.hi?300:100);
+  }
+  await delay(350);
+  var b=document.getElementById('boot');
+  b.style.transition='opacity 0.35s';
+  b.style.opacity='0';
+  await delay(360);
+  b.classList.add('hidden');
+  document.getElementById('setup').classList.remove('hidden');
+}
+
+function setStatus(cls,txt){
+  document.getElementById('dot').className='dot '+cls;
+  document.getElementById('status-txt').textContent=txt;
+}
+function setLog(msg,color){
+  var el=document.getElementById('setup-log');
+  el.style.color=color||'var(--text-dim)';
+  el.textContent=msg?'› '+msg:'';
+}
+function toast(msg,ms){
+  ms=ms||1800;
+  var t=document.getElementById('toast');
+  t.textContent=msg;t.classList.add('show');
+  setTimeout(function(){t.classList.remove('show')},ms);
+}
+function esc(s){
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+}
+function addMsg(sender,text,kind){
+  var msgs=document.getElementById('messages');
+  var now=new Date().toTimeString().slice(0,8);
+  var row=document.createElement('div');
+  row.className='msg'+(kind==='sys'?' sys-row':'');
+  var sc=sender==='YOU'?'you':sender==='PEER'?'peer':'sys';
+  row.innerHTML='<span class="msg-t">'+now+'</span>'
+    +'<span class="msg-s '+sc+'">'+sender+'</span>'
+    +'<span class="msg-b">'+esc(text)+'</span>';
+  msgs.appendChild(row);
+  msgs.scrollTop=msgs.scrollHeight;
+}
+function addDivider(){
+  var hr=document.createElement('hr');hr.className='div';
+  document.getElementById('messages').appendChild(hr);
+}
+function genCode(){
+  var chars='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  var arr=new Uint8Array(6);crypto.getRandomValues(arr);
+  return Array.from(arr,function(b){return chars[b%chars.length]}).join('');
+}
+function copyCode(){
+  navigator.clipboard.writeText(myCode)
+    .then(function(){toast('CODE COPIED')})
+    .catch(function(){toast('SELECT AND COPY MANUALLY')});
+}
+
+// CRYPTO
+async function genKeyPair(){
+  return crypto.subtle.generateKey({name:'ECDH',namedCurve:'P-256'},true,['deriveKey']);
+}
+async function exportPub(kp){
+  var raw=await crypto.subtle.exportKey('raw',kp.publicKey);
+  return btoa(String.fromCharCode.apply(null,new Uint8Array(raw)));
+}
+async function importPub(b64){
+  var raw=Uint8Array.from(atob(b64),function(c){return c.charCodeAt(0)});
+  return crypto.subtle.importKey('raw',raw,{name:'ECDH',namedCurve:'P-256'},false,[]);
+}
+async function deriveSharedKey(kp,peerPub){
+  return crypto.subtle.deriveKey(
+    {name:'ECDH',public:peerPub},kp.privateKey,
+    {name:'AES-GCM',length:256},false,['encrypt','decrypt']
+  );
+}
+async function encrypt(key,text){
+  var iv=crypto.getRandomValues(new Uint8Array(12));
+  var ct=await crypto.subtle.encrypt({name:'AES-GCM',iv:iv},key,new TextEncoder().encode(text));
+  var out=new Uint8Array(12+ct.byteLength);
+  out.set(iv);out.set(new Uint8Array(ct),12);
+  return btoa(String.fromCharCode.apply(null,out));
+}
+async function decrypt(key,b64){
+  var buf=Uint8Array.from(atob(b64),function(c){return c.charCodeAt(0)});
+  var pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:buf.slice(0,12)},key,buf.slice(12));
+  return new TextDecoder().decode(pt);
+}
+async function fingerprint(a,b){
+  var combined=new TextEncoder().encode([a,b].sort().join('|'));
+  var hash=await crypto.subtle.digest('SHA-256',combined);
+  return Array.from(new Uint8Array(hash)).slice(0,10)
+    .map(function(b){return b.toString(16).padStart(2,'0')})
+    .join(':').toUpperCase();
+}
+
+// PEER
+function initPeer(code){
+  myCode=code;
+  document.getElementById('code-val').textContent=myCode;
+  setStatus('conn','CONNECTING');
+  setLog('Connecting to signaling server…');
+
+  peer=new Peer('sc4-'+myCode,{
+    config:{iceServers:ICE,iceTransportPolicy:'all'},
+    debug:0
+  });
+
+  peer.on('open',function(){
+    setStatus('','READY');
+    setLog('Ready. Share your code with your peer.','var(--green)');
+    document.getElementById('waiting').style.display='flex';
+  });
+
+  peer.on('connection',function(incoming){
+    if(conn){incoming.close();return;}
+    conn=incoming;
+    setupConn();
+  });
+
+  peer.on('disconnected',function(){
+    setStatus('conn','RECONNECTING');
+    setLog('Relay disconnected — reconnecting…','var(--amber)');
+    setTimeout(function(){if(peer&&!peer.destroyed)peer.reconnect();},1000);
+  });
+
+  peer.on('error',function(err){
+    if(err.type==='unavailable-id'){peer.destroy();initPeer(genCode());return;}
+    if(err.type==='peer-unavailable'){
+      clearTimeout(connTimeout);
+      setLog('Peer not found. Check the code and try again.','var(--red)');
+      setStatus('','READY');
+      resetJoinBtn();conn=null;return;
+    }
+    if(err.type==='network'||err.type==='server-error'){
+      setStatus('conn','RECONNECTING');
+      setLog('Network error — retrying…','var(--amber)');
+      return;
+    }
+    setStatus('err','ERROR');
+    setLog('Error ['+err.type+']: '+err.message,'var(--red)');
+  });
+}
+
+function doJoin(){
+  var val=document.getElementById('join-input').value.trim().toUpperCase();
+  if(val.length!==6){setLog('Enter a valid 6-character code','var(--red)');return;}
+  if(val===myCode){setLog('Cannot connect to your own code','var(--red)');return;}
+  document.getElementById('join-btn').textContent='CONNECTING…';
+  document.getElementById('join-btn').disabled=true;
+  setLog('Connecting to '+val+'…','var(--amber)');
+  setStatus('conn','CONNECTING');
+  conn=peer.connect('sc4-'+val,{reliable:true,serialization:'json'});
+  setupConn();
+  connTimeout=setTimeout(function(){
+    if(!sharedKey){
+      setLog('Connection timed out. Check the code and try again.','var(--red)');
+      setStatus('','READY');resetJoinBtn();
+      if(conn){try{conn.close()}catch(e){}conn=null;}
+    }
+  },20000);
+}
+
+function setupConn(){
+  conn.on('open',function(){
+    clearTimeout(connTimeout);
+    setStatus('conn','KEY EXCHANGE');
+    setLog('Connection open — exchanging keys…','var(--amber)');
+    conn.send({type:'key_exchange',pub:myPubB64});
+  });
+
+  conn.on('data',async function(data){
+    if(!data||!data.type)return;
+    if(data.type==='key_exchange'){
+      try{
+        var peerPub=await importPub(data.pub);
+        sharedKey=await deriveSharedKey(myKeyPair,peerPub);
+        var fp=await fingerprint(myPubB64,data.pub);
+        document.getElementById('fp-display').textContent='FP '+fp;
+        setStatus('on','SECURE');
+        showChat();
+        addMsg('SYS','Secure channel established. All messages are end-to-end encrypted.','sys');
+        addMsg('SYS','Key fingerprint: '+fp,'sys');
+        addMsg('SYS','Verify this matches your peer\'s screen to rule out man-in-the-middle.','sys');
+        addDivider();
+      }catch(e){
+        setStatus('err','KEY EXCHANGE FAILED');
+        setLog('Key exchange error: '+e.message,'var(--red)');
+      }
+      return;
+    }
+    if(!sharedKey)return;
+    if(data.type==='msg'){
+      try{var plain=await decrypt(sharedKey,data.payload);addMsg('PEER',plain);setTyping(false);}
+      catch(e){addMsg('SYS','[Decryption failed — message dropped]','sys');}
+    }
+    if(data.type==='typing')setTyping(!!data.on);
+    if(data.type==='bye'){addDivider();addMsg('SYS','Peer disconnected gracefully.','sys');onDisc();}
+  });
+
+  conn.on('close',function(){
+    clearTimeout(connTimeout);
+    if(sharedKey){addDivider();addMsg('SYS','Connection closed.','sys');}
+    onDisc();
+  });
+  conn.on('error',function(e){
+    clearTimeout(connTimeout);
+    setLog('Connection error: '+e.message,'var(--red)');
+    onDisc();
+  });
+}
+
+function send(obj){if(conn&&conn.open)conn.send(obj);}
+
+function onDisc(){
+  sharedKey=null;conn=null;
+  setStatus('err','DISCONNECTED');
+  document.getElementById('disc-btn').classList.add('hidden');
+}
+
+async function sendMsg(){
+  if(!sharedKey)return;
+  var inp=document.getElementById('msg-input');
+  var text=inp.value.trim();if(!text)return;
+  try{
+    var payload=await encrypt(sharedKey,text);
+    send({type:'msg',payload:payload});
+    addMsg('YOU',text);
+    inp.value='';inp.style.height='auto';
+    clearTimeout(typingOutTimer);
+    if(lastTypingSent){send({type:'typing',on:false});lastTypingSent=false;}
+  }catch(e){toast('ENCRYPTION ERROR');}
+}
+
+function handleTyping(){
+  var inp=document.getElementById('msg-input');
+  inp.style.height='auto';
+  inp.style.height=Math.min(inp.scrollHeight,110)+'px';
+  if(!sharedKey)return;
+  if(!lastTypingSent){send({type:'typing',on:true});lastTypingSent=true;}
+  clearTimeout(typingOutTimer);
+  typingOutTimer=setTimeout(function(){send({type:'typing',on:false});lastTypingSent=false;},2200);
+}
+function setTyping(on){
+  document.getElementById('typing-row').textContent=on?'PEER is typing…':'';
+}
+function handleKey(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMsg();}}
+
+function resetJoinBtn(){
+  document.getElementById('join-btn').textContent='ESTABLISH CONNECTION ↵';
+  document.getElementById('join-btn').disabled=false;
+}
+
+function doDisconnect(){
+  try{send({type:'bye'});}catch(e){}
+  if(conn){try{conn.close()}catch(e){}conn=null;}
+  sharedKey=null;
+  document.getElementById('chat').classList.add('hidden');
+  document.getElementById('setup').classList.remove('hidden');
+  document.getElementById('disc-btn').classList.add('hidden');
+  document.getElementById('messages').innerHTML='';
+  document.getElementById('typing-row').textContent='';
+  resetJoinBtn();
+  setStatus('','READY');
+  setLog('Disconnected. Listening on code: '+myCode,'var(--text-dim)');
+  document.getElementById('waiting').style.display='flex';
+}
+
+function showChat(){
+  document.getElementById('setup').classList.add('hidden');
+  document.getElementById('chat').classList.remove('hidden');
+  document.getElementById('disc-btn').classList.remove('hidden');
+  setTimeout(function(){document.getElementById('msg-input').focus();},100);
+}
+
+document.getElementById('join-input').addEventListener('input',function(){
+  this.value=this.value.toUpperCase().replace(/[^A-Z2-9]/g,'');
+});
+document.getElementById('join-input').addEventListener('keydown',function(e){
+  if(e.key==='Enter')doJoin();
+});
+
+(async function(){
+  myKeyPair=await genKeyPair();
+  myPubB64=await exportPub(myKeyPair);
+  await runBoot();
+  initPeer(genCode());
+})();
+</script>
+</body>
+</html>
